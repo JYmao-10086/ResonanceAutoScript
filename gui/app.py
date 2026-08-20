@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import threading
 import tkinter as tk
+from tkinter import messagebox
 
 import customtkinter as ctk
 
@@ -13,6 +14,7 @@ from adb_ops.connector import RunAdb
 from config import DEFAULT_ADB_DIR, ICON_PATH
 from data import cleaned_merchandises, load_cities
 from state import state
+from utils import updater
 from workers.trading import TradingThread
 from . import settings as settings_io
 
@@ -31,7 +33,6 @@ def set_enabled(widget, enabled: bool) -> None:
 
 
 def style_tabview(tabview: ctk.CTkTabview) -> None:
-    """让标签页更醒目。"""
     tabview.configure(
         border_width=1,
         border_color=("#C5CDD8", "#3A3A3A"),
@@ -387,7 +388,25 @@ class TradingAssistantApp(ctk.CTk):
         self.connect_adb_button = ctk.CTkButton(
             control, text="重新连接 ADB", width=160, command=self.connect_adb
         )
-        self.connect_adb_button.grid(row=3, column=0, sticky="w", padx=14, pady=(12, 14))
+        self.connect_adb_button.grid(row=3, column=0, sticky="w", padx=14, pady=(12, 8))
+
+        ctk.CTkFrame(control, height=2, fg_color=("#C5CDD8", "#4A4A4A")).grid(
+            row=4, column=0, sticky="ew", padx=14, pady=(8, 8)
+        )
+        ctk.CTkLabel(control, text="程序更新", font=ctk.CTkFont(size=14, weight="bold")).grid(
+            row=5, column=0, sticky="w", padx=14, pady=(4, 8)
+        )
+        self.update_app_button = ctk.CTkButton(
+            control, text="更新程序", width=160, command=self.check_for_update
+        )
+        self.update_app_button.grid(row=6, column=0, sticky="w", padx=14, pady=(0, 14))
+        ctk.CTkLabel(
+            control,
+            text="从 GitHub 同步更新,若更新失败则需要挂梯子或手动下载更新包",
+            font=ctk.CTkFont(size=12),
+            text_color=("#5B6B7A", "#AAAAAA"),
+            justify="left",
+        ).grid(row=7, column=0, sticky="w", padx=14, pady=(0, 14))
 
     def _sync_comboboxes_from_vars(self) -> None:
         if self.start_var.get():
@@ -435,6 +454,109 @@ class TradingAssistantApp(ctk.CTk):
             self.update_log("ADB 重连完成。\n")
         else:
             self.update_log("ADB 重连失败，请检查模拟器与 adb 路径。\n")
+
+    def check_for_update(self) -> None:
+        """检查 GitHub 是否有新版本。"""
+        if state.trading_thread is not None and state.trading_thread.is_alive():
+            messagebox.showwarning("更新程序", "请先停止跑商后再更新。")
+            return
+
+        set_enabled(self.update_app_button, False)
+        self.update_log("正在检查程序更新...\n")
+
+        def worker() -> None:
+            result = updater.check_for_update(
+                progress=lambda msg: self.after(0, lambda m=msg: self.update_log(m))
+            )
+            self.after(0, lambda: self._on_update_check_finished(result))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_update_check_finished(self, result: updater.UpdateCheckResult) -> None:
+        if result.error:
+            set_enabled(self.update_app_button, True)
+            self.update_log(f"检查更新失败：{result.error}\n")
+            messagebox.showerror("更新程序", f"检查更新失败：\n{result.error}")
+            return
+
+        if not result.has_update:
+            set_enabled(self.update_app_button, True)
+            tip = (
+                f"当前已是最新版本（{updater.format_tag(result.remote_tag)}）。"
+                if result.remote_tag
+                else "当前已是最新版本。"
+            )
+            self.update_log(tip + "\n")
+            messagebox.showinfo("更新程序", tip)
+            return
+
+        local = updater.format_tag(result.local_tag)
+        remote = updater.format_tag(result.remote_tag)
+        detail = result.release_notes or result.release_name or "（无说明）"
+        size_text = updater.format_size(result.asset_size)
+        prompt = (
+            f"检测到新的 Release 版本。\n\n"
+            f"本地：{local}\n"
+            f"远程：{remote}\n"
+            f"资源：{result.asset_name}（{size_text}）\n"
+            f"说明：{detail}\n\n"
+            f"确认后将下载封装压缩包，更新改动文件并删除弃用文件。\n"
+            f"（保留 settings.json 与 adb/）\n\n"
+            f"是否立即更新？"
+        )
+        self.update_log(f"发现更新：{local} -> {remote} / {result.asset_name}\n")
+        if not messagebox.askyesno("发现更新", prompt):
+            set_enabled(self.update_app_button, True)
+            self.update_log("已取消更新。\n")
+            return
+
+        self.update_log("开始下载 Release 更新包...\n")
+
+        def worker() -> None:
+            apply_result = updater.apply_update(
+                result,
+                progress=lambda msg: self.after(0, lambda m=msg: self.update_log(m)),
+            )
+            self.after(0, lambda: self._on_update_apply_finished(apply_result))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_update_apply_finished(self, result: updater.ApplyResult) -> None:
+        set_enabled(self.update_app_button, True)
+        if not result.ok:
+            self.update_log(f"更新失败：{result.error}\n")
+            messagebox.showerror("更新程序", f"更新失败：\n{result.error}")
+            return
+
+        self.update_log(
+            f"更新成功：写入 {len(result.updated)} 个文件，"
+            f"删除 {len(result.deleted)} 个弃用文件。\n"
+        )
+        if result.updated:
+            preview = "、".join(result.updated[:8])
+            if len(result.updated) > 8:
+                preview += "..."
+            self.update_log(f"更新文件：{preview}\n")
+        if result.deleted:
+            preview = "、".join(result.deleted[:8])
+            if len(result.deleted) > 8:
+                preview += "..."
+            self.update_log(f"删除文件：{preview}\n")
+
+        if result.restart_required:
+            messagebox.showinfo(
+                "更新即将完成",
+                "部分文件（如正在运行的 exe）需要关闭后替换。\n"
+                "程序将自动退出并完成更新，请稍候。",
+            )
+            self.save_settings()
+            self.destroy()
+            return
+
+        messagebox.showinfo(
+            "更新完成",
+            "程序已更新完成。\n请重启程序以使全部改动生效。",
+        )
 
     def on_validate(self, P: str) -> bool:
         return P.strip() == "" or P.isdigit()
