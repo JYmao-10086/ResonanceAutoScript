@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import os
+import sys
+
+
+def _app_root() -> str:
+    """源码运行取项目根；封装 exe 取可执行文件所在目录。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
 
 # 模板图与坐标逻辑的基准分辨率（picture 资源按此分辨率截取）
 BASE_WIDTH = 1920
 BASE_HEIGHT = 1080
 
 # 项目根目录
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = _app_root()
 
 PICTURE_DIR = os.path.join(ROOT_DIR, "picture")
 SETTINGS_FILE = os.path.join(ROOT_DIR, "settings.json")

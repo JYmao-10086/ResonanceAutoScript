@@ -1,8 +1,6 @@
 """
 跑商助手入口。
 
-启动：
-    python gui_picture.py
 """
 
 from __future__ import annotations
