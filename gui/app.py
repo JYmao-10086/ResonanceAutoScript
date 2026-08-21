@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox
@@ -15,6 +16,7 @@ from config import DEFAULT_ADB_DIR, ICON_PATH, MUMU_PORT
 from data import cleaned_merchandises, load_cities
 from state import state
 from utils import updater
+from utils.logger import LogRecorder, StdoutCapture
 from workers.trading import TradingThread
 from . import settings as settings_io
 
@@ -49,6 +51,8 @@ def style_tabview(tabview: ctk.CTkTabview) -> None:
 class TradingAssistantApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
+        self.logger = LogRecorder()
+        sys.stdout = StdoutCapture(sys.stdout, self.logger)
         self.cities = load_cities()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.title("跑商助手")
@@ -541,6 +545,7 @@ class TradingAssistantApp(ctk.CTk):
                 "程序将自动退出并完成更新，请稍候。",
             )
             self.save_settings()
+            self.logger.save()
             self.destroy()
             return
 
@@ -665,6 +670,7 @@ class TradingAssistantApp(ctk.CTk):
             set_enabled(self.stop_when_finished_button, False)
 
     def update_log(self, message: str) -> None:
+        self.logger.add_front(message)
         for box in (self.log_text, self.connect_log_text):
             box.configure(state="normal")
             box.insert("end", message + "\n")
@@ -692,4 +698,5 @@ class TradingAssistantApp(ctk.CTk):
                 print("ADB server 已关闭。")
             except OSError as e:
                 print(f"关闭 ADB 失败: {e}")
+        self.logger.save()
         self.destroy()
