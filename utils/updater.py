@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Optional, Set
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -73,8 +73,6 @@ class UpdateCheckResult:
 @dataclass
 class ApplyResult:
     ok: bool
-    updated: list[str] = field(default_factory=list)
-    deleted: list[str] = field(default_factory=list)
     error: str = ""
     restart_required: bool = False
     restart_exe: str = ""
@@ -318,7 +316,7 @@ if exist "%DST%\\%EXE%" start "" "%DST%\\%EXE%"
 rd /s /q "%SRC%"
 del "%~f0"
 """
-    with open(script, "w", encoding="gbk", errors="replace") as f:
+    with open(script, "w", encoding="utf-8", errors="replace") as f:
         f.write(content)
     return script
 
@@ -345,14 +343,9 @@ def apply_update(
 
         to_update = sorted(remote_files)
         to_delete = sorted(local_files - remote_files)
-        updated: list[str] = []
-        deleted: list[str] = []
         locked_files: list[str] = []
 
-        log(
-            f"开始同步 Release {check.remote_tag}："
-            f"更新 {len(to_update)} 个文件，删除 {len(to_delete)} 个弃用文件..."
-        )
+        log(f"开始同步 Release {check.remote_tag}...")
 
         for rel in to_update:
             if is_protected(rel):
@@ -364,7 +357,6 @@ def apply_update(
                 if running_rel and rel.lower() == running_rel.lower():
                     raise PermissionError("running executable")
                 _copy_file(src, dst)
-                updated.append(rel)
             except OSError:
                 locked_files.append(rel)
 
@@ -377,7 +369,6 @@ def apply_update(
             if os.path.isfile(path):
                 try:
                     os.remove(path)
-                    deleted.append(rel)
                 except OSError:
                     locked_files.append(rel)
                 parent = os.path.dirname(path)
@@ -407,16 +398,10 @@ def apply_update(
             script = _write_restart_script(app_root, staging_keep, exe_name)
             log("部分文件被占用，将关闭程序后自动完成替换。")
             subprocess.Popen(["cmd", "/c", script], cwd=app_root, creationflags=0x00000008)
-            return ApplyResult(
-                True,
-                updated=updated,
-                deleted=deleted,
-                restart_required=True,
-                restart_exe=exe_name,
-            )
+            return ApplyResult(True, restart_required=True, restart_exe=exe_name)
 
         log("更新完成，请重启程序使全部改动生效。")
-        return ApplyResult(True, updated=updated, deleted=deleted)
+        return ApplyResult(True)
     except HTTPError as e:
         return ApplyResult(False, error=f"下载失败: HTTP {e.code}")
     except URLError as e:

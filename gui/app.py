@@ -11,7 +11,7 @@ import customtkinter as ctk
 
 from adb_ops.client import AdbClient
 from adb_ops.connector import RunAdb
-from config import DEFAULT_ADB_DIR, ICON_PATH
+from config import DEFAULT_ADB_DIR, ICON_PATH, MUMU_PORT
 from data import cleaned_merchandises, load_cities
 from state import state
 from utils import updater
@@ -75,6 +75,7 @@ class TradingAssistantApp(ctk.CTk):
         self.fatigue_recovery_var = tk.BooleanVar(value=False)
         self.auto_catch = tk.BooleanVar(value=False)
         self.adb_location = tk.StringVar()
+        self.adb_port = tk.StringVar(value="7555")
 
         for var in (
             self.round_trip_times_var,
@@ -82,6 +83,7 @@ class TradingAssistantApp(ctk.CTk):
             self.gum_var,
             self.lighter_var,
             self.birch_stone_var,
+            self.adb_port,
         ):
             self._bind_digits_only(var)
 
@@ -385,28 +387,32 @@ class TradingAssistantApp(ctk.CTk):
         ctk.CTkEntry(control, textvariable=self.adb_location, width=300).grid(
             row=2, column=0, sticky="w", padx=14, pady=4
         )
+        ctk.CTkLabel(control, text="端口").grid(row=3, column=0, sticky="w", padx=14, pady=4)
+        ctk.CTkEntry(control, textvariable=self.adb_port, width=100).grid(
+            row=4, column=0, sticky="w", padx=14, pady=4
+        )
         self.connect_adb_button = ctk.CTkButton(
             control, text="重新连接 ADB", width=160, command=self.connect_adb
         )
-        self.connect_adb_button.grid(row=3, column=0, sticky="w", padx=14, pady=(12, 8))
+        self.connect_adb_button.grid(row=5, column=0, sticky="w", padx=14, pady=(12, 8))
 
         ctk.CTkFrame(control, height=2, fg_color=("#C5CDD8", "#4A4A4A")).grid(
-            row=4, column=0, sticky="ew", padx=14, pady=(8, 8)
+            row=6, column=0, sticky="ew", padx=14, pady=(8, 8)
         )
         ctk.CTkLabel(control, text="程序更新", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=5, column=0, sticky="w", padx=14, pady=(4, 8)
+            row=7, column=0, sticky="w", padx=14, pady=(4, 8)
         )
         self.update_app_button = ctk.CTkButton(
             control, text="更新程序", width=160, command=self.check_for_update
         )
-        self.update_app_button.grid(row=6, column=0, sticky="w", padx=14, pady=(0, 14))
+        self.update_app_button.grid(row=8, column=0, sticky="w", padx=14, pady=(0, 14))
         ctk.CTkLabel(
             control,
             text="从 GitHub 同步更新,若更新失败则需要挂梯子或手动下载更新包",
             font=ctk.CTkFont(size=12),
             text_color=("#5B6B7A", "#AAAAAA"),
             justify="left",
-        ).grid(row=7, column=0, sticky="w", padx=14, pady=(0, 14))
+        ).grid(row=9, column=0, sticky="w", padx=14, pady=(0, 14))
 
     def _sync_comboboxes_from_vars(self) -> None:
         if self.start_var.get():
@@ -425,7 +431,8 @@ class TradingAssistantApp(ctk.CTk):
     def _begin_adb_connect(self, on_finished=None) -> None:
         """后台发起 ADB 连接。"""
         self._resolve_adb_path()
-        RunAdb(self, on_finished=on_finished).start()
+        port = self.adb_port.get().strip() or MUMU_PORT
+        RunAdb(self, port=port, on_finished=on_finished).start()
 
     def connect_adb(self) -> None:
         """连接设置页：手动重连 ADB。"""
@@ -453,7 +460,7 @@ class TradingAssistantApp(ctk.CTk):
         if ok:
             self.update_log("ADB 重连完成。\n")
         else:
-            self.update_log("ADB 重连失败，请检查模拟器与 adb 路径。\n")
+            self.update_log("ADB 重连失败，请检查模拟器与 adb 路径端口。\n")
 
     def check_for_update(self) -> None:
         """检查 GitHub 是否有新版本。"""
@@ -500,8 +507,6 @@ class TradingAssistantApp(ctk.CTk):
             f"远程：{remote}\n"
             f"资源：{result.asset_name}（{size_text}）\n"
             f"说明：{detail}\n\n"
-            f"确认后将下载封装压缩包，更新改动文件并删除弃用文件。\n"
-            f"（保留 settings.json 与 adb/）\n\n"
             f"是否立即更新？"
         )
         self.update_log(f"发现更新：{local} -> {remote} / {result.asset_name}\n")
@@ -528,20 +533,6 @@ class TradingAssistantApp(ctk.CTk):
             messagebox.showerror("更新程序", f"更新失败：\n{result.error}")
             return
 
-        self.update_log(
-            f"更新成功：写入 {len(result.updated)} 个文件，"
-            f"删除 {len(result.deleted)} 个弃用文件。\n"
-        )
-        if result.updated:
-            preview = "、".join(result.updated[:8])
-            if len(result.updated) > 8:
-                preview += "..."
-            self.update_log(f"更新文件：{preview}\n")
-        if result.deleted:
-            preview = "、".join(result.deleted[:8])
-            if len(result.deleted) > 8:
-                preview += "..."
-            self.update_log(f"删除文件：{preview}\n")
 
         if result.restart_required:
             messagebox.showinfo(

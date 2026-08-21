@@ -18,10 +18,12 @@ class RunAdb(threading.Thread):
     def __init__(
         self,
         app: "TradingAssistantApp",
+        port: str = MUMU_PORT,
         on_finished: Optional[Callable[[bool], None]] = None,
     ) -> None:
         super().__init__(daemon=True)
         self.app = app
+        self.port = port
         self.client = AdbClient()
         self.on_finished = on_finished
 
@@ -54,11 +56,14 @@ class RunAdb(threading.Thread):
         """尝试连接常见模拟器，成功返回 True。"""
         state.adb_connected = False
 
-        candidates = [
-            ("MuMu模拟器", MUMU_PORT),
-            ("雷电模拟器", LDPLAYER_PORT),
-            ("夜神模拟器", NOX_PORT),
-        ]
+        if self.port == MUMU_PORT:
+            candidates = [
+                ("MuMu模拟器", MUMU_PORT),
+                ("雷电模拟器", LDPLAYER_PORT),
+                ("夜神模拟器", NOX_PORT),
+            ]
+        else:
+            candidates = [(f"127.0.0.1:{self.port}", self.port)]
         for index, (name, port) in enumerate(candidates):
             if index > 0:
                 app.update_log("连接失败")
