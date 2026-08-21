@@ -1,45 +1,31 @@
 # 跑商助手
 
-界面基于 [CustomTkinter](https://customtkinter.tomschimansky.com/)，风格简洁现代。
+基于 ADB 与图像识别的模拟器自动跑商工具，支持 Windows 和常见安卓模拟器。
 
-## 安装依赖
+## 功能
 
-```bash
-pip install -r requirements.txt
-```
+- 自动跑商：选择起点 / 终点城市，自动买入卖出，支持双程、单程
+- 自动补给：自动使用棒棒糖、口香糖、跳糖、桦石，可开启疲劳恢复
+- 自动拾取：跑商过程中自动拾取掉落物
+- 商品策略：按城市勾选商品、设置填货数量、讨价还价、抬价
+- 模拟器适配：MuMu（默认端口 7555）、雷电（5555）、夜神（62001），支持自定义端口
 
-## 启动
+## 快速开始
 
-```bash
-python gui_picture.py
-```
+1. 下载最新 Release 的 `ResonanceAuto.zip` 并解压，运行 `跑商助手.exe`
+2. 启动模拟器并进入游戏
+3. 在「连接设置」页确认 adb 目录与端口（默认 7555），点击「重新连接 ADB」，日志显示连接成功即可
+4. 在「交易所设置」页按城市配置商品
+5. 在「跑商」页选择起点、终点和双程次数，点击「双程跑商」或「单程跑商」
+6. 运行中可随时「暂停」「继续」「停止」；勾选「疲劳恢复」「自动拾取」后会自动执行对应操作
 
-## 更新（面向封装版用户）
+## 更新
 
-在「连接设置」页点击 **更新程序**：
+在「连接设置」页点击「更新程序」，程序会从 GitHub Releases 下载并应用最新封装包，保留本地 `settings.json` 与 `adb/` 目录；若正在运行的 exe 无法直接覆盖，程序会自动退出并完成替换后重启。
 
-1. 检查 GitHub Releases 最新版本标签
-2. 下载 Release 中的 **zip 封装包**（内含 exe 等文件）
-3. 同步改动文件，并删除弃用文件
-4. 本地 `settings.json` 与 `adb/` 不会被覆盖或删除
+## 常见问题
 
-发布 Release 时请上传 `.zip` 资源；若正在运行的 exe 无法直接覆盖，程序会退出并由脚本自动完成替换后重启。
+- 连接失败：确认模拟器已开启，端口与模拟器实际端口一致（MuMu 7555 / 雷电 5555 / 夜神 62001），然后重新点击「连接 ADB」重试
+- 更新失败：多为网络原因，可尝试代理后重试，或手动下载更新包
 
-仓库：[`JYmao-10086/ResonanceAutoScript`](https://github.com/JYmao-10086/ResonanceAutoScript)
-
-## 目录结构
-
-```
-gui_picture.py           # 程序入口
-config.py                # 路径与默认配置
-state.py                 # 运行时共享状态
-adb_ops/                 # ADB 命令与模拟器连接（非依赖目录 adb/）
-vision/                  # 模板匹配
-workers/                 # 跑商 / 拾取等后台线程
-gui/                     # 界面与设置读写
-data/                    # 城市-商品表加载
-utils/                   # 通用工具（读图、Release 更新）
-adb/                     # ADB 依赖（无需修改）
-picture/                 # 模板图片资源
-城市-商品.xlsx
-```
+仓库：[JYmao-10086/ResonanceAutoScript](https://github.com/JYmao-10086/ResonanceAutoScript)
