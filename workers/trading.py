@@ -176,8 +176,8 @@ class TradingThread(ControllableThread):
             templste_location = self.find_template("空货仓")
             if not templste_location:
                 if self.should_continue():
-                    raise_price_times = int(self.app.raise_price_times_vars[end].get())
-                    raise_price_success = int(self.app.raise_price_success_vars[end].get())
+                    raise_price_times = int(self.app.raise_price_times_vars[start].get())
+                    raise_price_success = int(self.app.raise_price_success_vars[start].get())
                     if raise_price_times > 0:
                         self.bargain("抬价", raise_price_times, raise_price_success)
                         self.app.update_log("抬价完成")
