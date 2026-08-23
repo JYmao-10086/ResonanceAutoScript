@@ -3,3 +3,5 @@ pandas
 numpy
 opencv-python
 openpyxl
+rapidocr
+onnxruntime

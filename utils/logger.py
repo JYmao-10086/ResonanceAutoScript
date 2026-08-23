@@ -55,7 +55,10 @@ class StdoutCapture:
 
     def write(self, message: str) -> int:
         self._recorder.add_back(message)
+        if self._real is None:
+            return len(message)
         return self._real.write(message)
 
     def flush(self) -> None:
-        self._real.flush()
+        if self._real is not None:
+            self._real.flush()

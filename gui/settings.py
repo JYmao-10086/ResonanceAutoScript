@@ -24,6 +24,10 @@ def collect_settings(app: "TradingAssistantApp") -> Dict[str, Any]:
         "lighter": app.lighter_var.get(),
         "birch_stone": app.birch_stone_var.get(),
         "fatigue_recovery": app.fatigue_recovery_var.get(),
+        "auto_catch": app.auto_catch.get(),
+        "use_tow": app.use_tow_var.get(),
+        "use_iron_coin": app.use_iron_coin_var.get(),
+        "tow_times": app.tow_times_var.get(),
         "merchandise": {
             city: {item: var.get() for item, var in city_vars.items()}
             for city, city_vars in app.merchandise_vars.items()
@@ -42,6 +46,8 @@ def collect_settings(app: "TradingAssistantApp") -> Dict[str, Any]:
             city: var.get() for city, var in app.raise_price_success_vars.items()
         },
         "purchase_book": {city: var.get() for city, var in app.purchase_book_vars.items()},
+        "bargain_item": {city: var.get() for city, var in app.bargain_item_vars.items()},
+        "raise_item": {city: var.get() for city, var in app.raise_item_vars.items()},
     }
 
 
@@ -66,6 +72,10 @@ def apply_settings(app: "TradingAssistantApp", settings: Dict[str, Any]) -> None
     app.lighter_var.set(settings.get("lighter", ""))
     app.birch_stone_var.set(settings.get("birch_stone", ""))
     app.fatigue_recovery_var.set(settings.get("fatigue_recovery", ""))
+    app.auto_catch.set(settings.get("auto_catch", False))
+    app.use_tow_var.set(settings.get("use_tow", False))
+    app.use_iron_coin_var.set(settings.get("use_iron_coin", False))
+    app.tow_times_var.set(str(settings.get("tow_times", 0)))
 
     fill_merchandise = settings.get("fill_merchandise", {}) or {}
     merchandise = settings.get("merchandise", {}) or {}
@@ -96,6 +106,14 @@ def apply_settings(app: "TradingAssistantApp", settings: Dict[str, Any]) -> None
             purchase_book = settings.get("purchase_book", {}) or {}
             if city in purchase_book:
                 app.purchase_book_vars[city].set(purchase_book[city])
+        if city in app.bargain_item_vars:
+            bargain_item = settings.get("bargain_item", {}) or {}
+            if city in bargain_item:
+                app.bargain_item_vars[city].set(bargain_item[city])
+        if city in app.raise_item_vars:
+            raise_item = settings.get("raise_item", {}) or {}
+            if city in raise_item:
+                app.raise_item_vars[city].set(raise_item[city])
 
 
 def load_settings(app: "TradingAssistantApp", path: str = SETTINGS_FILE) -> None:

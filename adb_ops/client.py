@@ -123,6 +123,38 @@ class AdbClient:
         if delay:
             time.sleep(delay)
 
+    def swipe_with_hold(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        duration: int = 500,
+        hold_delay: float = 1.0,
+        delay: float = 0.0,
+    ) -> None:
+        """按住 -> 移动 -> 停止并保持按住 -> 抬起。
+
+        移动阶段分多段 MOVE 事件，确保拖动被识别；移动结束后保持按住
+        hold_delay 时长，等地图惯性消退后再抬起，避免松手后继续滑动。
+        依赖设备 `input motionevent` 子命令，需要 Android 9+。
+        """
+        sx, sy = design_to_device(start_x, start_y)
+        ex, ey = design_to_device(end_x, end_y)
+        self.run_on_device(["shell", "input", "motionevent", "DOWN", str(sx), str(sy)])
+        steps = max(4, duration // 50)
+        for i in range(1, steps + 1):
+            time.sleep(duration / 1000.0 / steps)
+            x = int(sx + (ex - sx) * i / steps)
+            y = int(sy + (ey - sy) * i / steps)
+            self.run_on_device(["shell", "input", "motionevent", "MOVE", str(x), str(y)])
+        # 关键：停止移动后按住不抬，等地图惯性消退，避免松手后继续滑动
+        if hold_delay:
+            time.sleep(hold_delay)
+        self.run_on_device(["shell", "input", "motionevent", "UP", str(ex), str(ey)])
+        if delay:
+            time.sleep(delay)
+
     def take_screenshot(self) -> None:
         self.run_on_device(["shell", "screencap", SCREENSHOT_DEVICE_PATH])
         print("已截图")

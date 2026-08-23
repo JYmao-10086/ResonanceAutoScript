@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob
 import os
 import sys
 import threading
@@ -12,7 +13,7 @@ import customtkinter as ctk
 
 from adb_ops.client import AdbClient
 from adb_ops.connector import RunAdb
-from config import DEFAULT_ADB_DIR, ICON_PATH, MUMU_PORT
+from config import DEFAULT_ADB_DIR, ICON_PATH, MUMU_PORT, picture_path
 from data import cleaned_merchandises, load_cities
 from state import state
 from utils import updater
@@ -32,6 +33,57 @@ CONTROL_W = 420
 
 def set_enabled(widget, enabled: bool) -> None:
     widget.configure(state="normal" if enabled else "disabled")
+
+
+BARGAIN_ITEM_EXCLUDED = {"进货采买书", "再交涉请求书"}
+
+
+def _bargain_items() -> list:
+    items = []
+    for path in sorted(glob.glob(os.path.join(picture_path("道具"), "*.png"))):
+        name = os.path.splitext(os.path.basename(path))[0]
+        if name not in BARGAIN_ITEM_EXCLUDED:
+            items.append(name)
+    return items
+
+
+def _toggle_radio_command(var, option: str, state: dict):
+    def _cmd() -> None:
+        if state["prev"] == option:
+            var.set("")
+            state["prev"] = ""
+        else:
+            state["prev"] = option
+    return _cmd
+
+
+def _spin_value(var, delta: int, min_value: int = 0) -> None:
+    try:
+        value = int(var.get() or 0)
+    except ValueError:
+        value = 0
+    var.set(str(max(min_value, value + delta)))
+
+
+def _spin_entry(parent, var, width=100):
+    entry = ctk.CTkEntry(parent, textvariable=var, width=width, height=30)
+    up = tk.Label(
+        entry, text="▲", font=("Microsoft YaHei UI", 8),
+        bg="#FFFFFF", fg="#1F2933", cursor="hand2",
+        height=1, bd=0, highlightthickness=0, pady=0, padx=0,
+    )
+    down = tk.Label(
+        entry, text="▼", font=("Microsoft YaHei UI", 8),
+        bg="#FFFFFF", fg="#1F2933", cursor="hand2",
+        height=1, bd=0, highlightthickness=0, pady=0, padx=0,
+    )
+    up.place(relx=1.0, x=-14, rely=0.12, anchor="ne")
+    down.place(relx=1.0, x=-14, rely=0.55, anchor="ne")
+    up.lift()
+    down.lift()
+    up.bind("<Button-1>", lambda e: _spin_value(var, 1))
+    down.bind("<Button-1>", lambda e: _spin_value(var, -1))
+    return entry
 
 
 def style_tabview(tabview: ctk.CTkTabview) -> None:
@@ -78,6 +130,10 @@ class TradingAssistantApp(ctk.CTk):
         self.birch_stone_var = tk.StringVar(value="0")
         self.fatigue_recovery_var = tk.BooleanVar(value=False)
         self.auto_catch = tk.BooleanVar(value=False)
+        self.use_tow_var = tk.BooleanVar(value=False)
+        self.already_bought_var = tk.BooleanVar(value=False)
+        self.use_iron_coin_var = tk.BooleanVar(value=False)
+        self.tow_times_var = tk.StringVar(value="0")
         self.adb_location = tk.StringVar()
         self.adb_port = tk.StringVar(value="7555")
 
@@ -87,6 +143,7 @@ class TradingAssistantApp(ctk.CTk):
             self.gum_var,
             self.lighter_var,
             self.birch_stone_var,
+            self.tow_times_var,
             self.adb_port,
         ):
             self._bind_digits_only(var)
@@ -181,7 +238,7 @@ class TradingAssistantApp(ctk.CTk):
         ctk.CTkLabel(times_row, text="双程次数", font=label_font, width=56, anchor="w").pack(
             side="left"
         )
-        ctk.CTkEntry(times_row, textvariable=self.round_trip_times_var, width=ENTRY_W).pack(
+        _spin_entry(times_row, self.round_trip_times_var, width=ENTRY_W).pack(
             side="left", padx=(8, 0)
         )
 
@@ -245,43 +302,65 @@ class TradingAssistantApp(ctk.CTk):
         ctk.CTkLabel(supply, text="棒棒糖", font=label_font, width=56, anchor="w").grid(
             row=0, column=0, sticky="w", pady=6
         )
-        ctk.CTkEntry(supply, textvariable=self.lollipop_var, width=ENTRY_W).grid(
+        _spin_entry(supply, self.lollipop_var, width=ENTRY_W).grid(
             row=0, column=1, sticky="w", padx=(6, 16), pady=6
         )
         ctk.CTkLabel(supply, text="口香糖", font=label_font, width=56, anchor="w").grid(
             row=0, column=2, sticky="w", pady=6
         )
-        ctk.CTkEntry(supply, textvariable=self.gum_var, width=ENTRY_W).grid(
+        _spin_entry(supply, self.gum_var, width=ENTRY_W).grid(
             row=0, column=3, sticky="w", padx=(6, 0), pady=6
         )
 
         ctk.CTkLabel(supply, text="跳糖", font=label_font, width=56, anchor="w").grid(
             row=1, column=0, sticky="w", pady=6
         )
-        ctk.CTkEntry(supply, textvariable=self.lighter_var, width=ENTRY_W).grid(
+        _spin_entry(supply, self.lighter_var, width=ENTRY_W).grid(
             row=1, column=1, sticky="w", padx=(6, 16), pady=6
         )
         ctk.CTkLabel(supply, text="桦石", font=label_font, width=56, anchor="w").grid(
             row=1, column=2, sticky="w", pady=6
         )
-        ctk.CTkEntry(supply, textvariable=self.birch_stone_var, width=ENTRY_W).grid(
+        _spin_entry(supply, self.birch_stone_var, width=ENTRY_W).grid(
             row=1, column=3, sticky="w", padx=(6, 0), pady=6
         )
 
+        tow_row = ctk.CTkFrame(control, fg_color="transparent")
+        tow_row.grid(row=8, column=0, sticky="ew", padx=12, pady=(0, 6))
+        ctk.CTkCheckBox(tow_row, text="使用拖车", variable=self.use_tow_var).pack(side="left")
+        ctk.CTkCheckBox(tow_row, text="铁盟币(拖车)", variable=self.use_iron_coin_var).pack(
+            side="left", padx=(5, 0)
+        )
+        ctk.CTkLabel(tow_row, text="次数", font=label_font).pack(side="left", padx=(14, 0))
+        _spin_entry(tow_row, self.tow_times_var, width=60).pack(side="left", padx=(6, 0))
+
         checks = ctk.CTkFrame(control, fg_color="transparent")
-        checks.grid(row=8, column=0, sticky="ew", padx=12, pady=(8, 16))
+        checks.grid(row=9, column=0, sticky="ew", padx=12, pady=(8, 16))
         ctk.CTkCheckBox(checks, text="疲劳恢复", variable=self.fatigue_recovery_var).pack(
+            side="left", padx=(0, 5)
+        )
+        ctk.CTkCheckBox(checks, text="自动拾取", variable=self.auto_catch).pack(
             side="left", padx=(0, 18)
         )
-        ctk.CTkCheckBox(checks, text="自动拾取", variable=self.auto_catch).pack(side="left")
+        ctk.CTkCheckBox(checks, text="已购买商品", variable=self.already_bought_var).pack(
+            side="left"
+        )
 
     def _build_exchange_tab(self, parent: ctk.CTkFrame) -> None:
-        parent.grid_columnconfigure(0, weight=1)
+        parent.grid_columnconfigure(0, weight=0)
+        parent.grid_columnconfigure(1, weight=1)
         parent.grid_rowconfigure(0, weight=1)
 
-        self.city_tabs = ctk.CTkTabview(parent, corner_radius=8)
-        self.city_tabs.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
-        style_tabview(self.city_tabs)
+        # 左侧：可滚动的城市列表
+        self.city_list = ctk.CTkScrollableFrame(parent, corner_radius=8, width=150)
+        self.city_list.grid(row=0, column=0, sticky="ns", padx=(4, 8), pady=4)
+
+        # 右侧：购买商品占主要空间，议价参数按自身宽度
+        content = ctk.CTkFrame(parent, corner_radius=8)
+        content.grid(row=0, column=1, sticky="nsew", padx=(0, 4), pady=4)
+        content.grid_columnconfigure(0, weight=1)
+        content.grid_columnconfigure(1, weight=0)
+        content.grid_rowconfigure(0, weight=1)
 
         self.merchandise_vars = {}
         self.fill_merchandise_vars = {}
@@ -290,19 +369,36 @@ class TradingAssistantApp(ctk.CTk):
         self.raise_price_times_vars = {}
         self.raise_price_success_vars = {}
         self.purchase_book_vars = {}
+        self.bargain_item_vars = {}
+        self.raise_item_vars = {}
+
+        self._city_buttons = {}
+        self._city_panels = {}
+        self._selected_city = None
+
+        item_options = _bargain_items()
 
         for city in self.cities:
-            tab = self.city_tabs.add(city)
-            tab.grid_columnconfigure(0, weight=1)
-            tab.grid_columnconfigure(1, weight=1)
-            tab.grid_rowconfigure(0, weight=1)
+            button = ctk.CTkButton(
+                self.city_list,
+                text=city,
+                anchor="w",
+                command=lambda c=city: self._select_exchange_city(c),
+            )
+            button.pack(fill="x", padx=6, pady=3)
+            self._city_buttons[city] = button
 
-            left = ctk.CTkScrollableFrame(tab, corner_radius=8)
-            left.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=4)
-            right = ctk.CTkFrame(tab, corner_radius=8)
-            right.grid(row=0, column=1, sticky="nsew", pady=4)
+            merch = ctk.CTkScrollableFrame(content, corner_radius=8)
+            merch.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=4)
+            merch.grid_columnconfigure(0, weight=1)
+            merch.grid_columnconfigure(1, weight=1)
 
-            ctk.CTkLabel(left, text="购买商品", font=ctk.CTkFont(weight="bold")).grid(
+            params = ctk.CTkScrollableFrame(content, corner_radius=8, width=300)
+            params.grid(row=0, column=1, sticky="nsew", pady=4)
+
+            self._city_panels[city] = {"merch": merch, "params": params}
+
+            ctk.CTkLabel(merch, text="购买商品", font=ctk.CTkFont(weight="bold")).grid(
                 row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(8, 6)
             )
 
@@ -315,15 +411,15 @@ class TradingAssistantApp(ctk.CTk):
                     continue
                 self.merchandise_vars[city][option] = tk.BooleanVar(value=False)
                 ctk.CTkCheckBox(
-                    left, text=option, variable=self.merchandise_vars[city][option]
+                    merch, text=option, variable=self.merchandise_vars[city][option]
                 ).grid(row=1 + i // 2, column=i % 2, sticky="w", padx=8, pady=3)
                 row_i = 1 + i // 2
 
-            ctk.CTkLabel(left, text="填补商品").grid(
+            ctk.CTkLabel(merch, text="填补商品").grid(
                 row=row_i + 1, column=0, sticky="w", padx=8, pady=(10, 6)
             )
             ctk.CTkComboBox(
-                left,
+                merch,
                 values=[""] + items,
                 variable=self.fill_merchandise_vars[city],
                 width=160,
@@ -344,10 +440,9 @@ class TradingAssistantApp(ctk.CTk):
             ):
                 self._bind_digits_only(var)
 
-            ctk.CTkLabel(right, text="交易参数", font=ctk.CTkFont(weight="bold")).grid(
+            ctk.CTkLabel(params, text="议价参数", font=ctk.CTkFont(weight="bold")).grid(
                 row=0, column=0, columnspan=2, sticky="w", padx=14, pady=(12, 8)
             )
-
             fields = [
                 ("砍价次数", self.bargain_times_vars[city]),
                 ("砍价成功次数", self.bargain_success_vars[city]),
@@ -356,11 +451,66 @@ class TradingAssistantApp(ctk.CTk):
                 ("进货采买书", self.purchase_book_vars[city]),
             ]
             for idx, (label, var) in enumerate(fields):
-                ctk.CTkLabel(right, text=label).grid(
+                ctk.CTkLabel(params, text=label).grid(
                     row=1 + idx, column=0, sticky="w", padx=14, pady=6
                 )
-                ctk.CTkEntry(right, textvariable=var, width=120).grid(
+                _spin_entry(params, var, width=120).grid(
                     row=1 + idx, column=1, sticky="w", padx=8, pady=6
+                )
+
+            self.bargain_item_vars[city] = tk.StringVar(value="")
+            self.raise_item_vars[city] = tk.StringVar(value="")
+            bargain_state = {"prev": ""}
+            raise_state = {"prev": ""}
+            item_start = len(fields) + 2
+            ctk.CTkLabel(params, text="砍价道具", font=ctk.CTkFont(weight="bold")).grid(
+                row=item_start, column=0, sticky="w", padx=14, pady=(12, 4)
+            )
+            ctk.CTkLabel(params, text="抬价道具", font=ctk.CTkFont(weight="bold")).grid(
+                row=item_start, column=1, sticky="w", padx=8, pady=(12, 4)
+            )
+            for i, option in enumerate(item_options):
+                ctk.CTkRadioButton(
+                    params,
+                    text=option,
+                    variable=self.bargain_item_vars[city],
+                    value=option,
+                    command=_toggle_radio_command(self.bargain_item_vars[city], option, bargain_state),
+                ).grid(row=item_start + 1 + i, column=0, sticky="w", padx=14, pady=2)
+                ctk.CTkRadioButton(
+                    params,
+                    text=option,
+                    variable=self.raise_item_vars[city],
+                    value=option,
+                    command=_toggle_radio_command(self.raise_item_vars[city], option, raise_state),
+                ).grid(row=item_start + 1 + i, column=1, sticky="w", padx=8, pady=2)
+
+        if self.cities:
+            self._select_exchange_city(next(iter(self.cities)))
+
+    def _select_exchange_city(self, city: str) -> None:
+        if self._selected_city == city:
+            return
+        self._selected_city = city
+        for name, panels in self._city_panels.items():
+            if name == city:
+                panels["merch"].grid()
+                panels["params"].grid()
+            else:
+                panels["merch"].grid_remove()
+                panels["params"].grid_remove()
+        for name, button in self._city_buttons.items():
+            if name == city:
+                button.configure(
+                    fg_color=("#2F6FED", "#1F5AD9"),
+                    hover_color=("#255CC7", "#1A4FBF"),
+                    text_color=("#FFFFFF", "#FFFFFF"),
+                )
+            else:
+                button.configure(
+                    fg_color=("#D7DEE8", "#333333"),
+                    hover_color=("#C5CDD8", "#3D3D3D"),
+                    text_color=("#1F2933", "#F5F5F5"),
                 )
 
     def _build_connect_tab(self, parent: ctk.CTkFrame) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 from adb_ops.client import AdbClient
+from config import RUBBISH_PICK_INTERVAL, RUBBISH_PICK_TAP
 from .base import ControllableThread
 
 
@@ -22,4 +23,4 @@ class PickUpRubbish(ControllableThread):
     def pick_up_rubbish(self) -> None:
         if not self.should_continue():
             return
-        self.client.tap_without_serial(1151, 725, delay=0.1)
+        self.client.tap_without_serial(RUBBISH_PICK_TAP[0], RUBBISH_PICK_TAP[1], delay=RUBBISH_PICK_INTERVAL)
