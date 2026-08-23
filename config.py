@@ -19,6 +19,7 @@ BASE_HEIGHT = 1080
 
 # 项目根目录
 ROOT_DIR = _app_root()
+APP_VERSION = "v1.1.1"
 
 PICTURE_DIR = os.path.join(ROOT_DIR, "picture")
 SETTINGS_FILE = os.path.join(ROOT_DIR, "settings.json")
